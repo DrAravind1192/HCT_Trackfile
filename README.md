@@ -93,7 +93,7 @@ The following modules are part of the Python standard library and do **not** req
 Clone the repository
 
 ```bash
-git clone https://github.com/draravind1192/HCT_Trackfile.git
+git clone https://github.com/DrAravind1192/HCT_Trackfile.git
 ```
 
 or download it as a ZIP from GitHub.
