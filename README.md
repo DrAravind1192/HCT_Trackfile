@@ -124,9 +124,11 @@ The GUI requires the following inputs.
 
 ## 1. Observing Month
 
-Choose the observing month from the drop-down list.
+Choose the observing month from the drop-down list. 
 
-_Make sure to change the selected month when changing the month in observing date (to produce trackfile for multiple dates)_
+_Make sure to change the selected month when changing the month in the observing date (to produce trackfile for multiple dates)_
+
+
 ---
 
 ## 2. Observation Date
