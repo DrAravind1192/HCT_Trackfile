@@ -8,6 +8,7 @@ import time
 from datetime import datetime, timedelta
 import os
 import csv
+import shutil
 import threading
 import subprocess
 import sys
@@ -25,12 +26,12 @@ stop_flag = False
 # ---------------------------------------------------------
 root = tk.Tk()
 root.title("Comet Trackfile Creator for HCT – GUI Version")
-root.geometry("980x980")
+root.geometry("600x650")
 root.config(bg="#f2f4f7")
 
 title = tk.Label(root, text="COMET TRACKFILE CREATOR FOR HCT, HANLE",
                  font=("Helvetica", 16, "bold"), bg="#f2f4f7")
-title.pack(pady=12)
+title.pack(pady=6)
 
 # ---------------------------------------------------------
 # CONSTANTS
@@ -45,39 +46,48 @@ months_dict = {
 # ---------------------------------------------------------
 # INPUT FRAME
 # ---------------------------------------------------------
-frame = tk.Frame(root, bg="#ffffff", relief="groove", bd=2, padx=15, pady=15)
-frame.pack(pady=10, fill="both")
+frame = tk.Frame(root, bg="#ffffff", relief="groove", bd=2, padx=10, pady=10)
+frame.pack(pady=6, fill="both")
 
 # Month
 tk.Label(frame, text="Select Observing Month:", bg="#ffffff").pack(anchor="w")
 month_var = tk.StringVar()
 month_menu = ttk.Combobox(frame, textvariable=month_var,
                           values=list(months_dict.keys()), state="readonly")
-month_menu.pack(fill="x", pady=5)
+month_menu.pack(fill="x", pady=3)
+
+#warning
+tk.Label(
+    frame,
+    text="* Remember to update this whenever you change the observation date below.",
+    bg="#ffffff",
+    fg="red",
+    font=("Arial", 9, "italic")
+).pack(anchor="w")
 
 # Date
 tk.Label(frame, text="Enter date of observation [YYYY-MM-DD]:", bg="#ffffff").pack(anchor="w")
 date_entry = tk.Entry(frame)
 date_entry.insert(0, "YYYY-MM-DD")
-date_entry.pack(fill="x", pady=5)
+date_entry.pack(fill="x", pady=3)
 
 # Object type
 tk.Label(frame, text="Select Object Type (Comet/Asteroid):", bg="#ffffff").pack(anchor="w")
 obj_type_var = tk.StringVar()
 type_menu = ttk.Combobox(frame, textvariable=obj_type_var,
                          values=["Comet", "Asteroid"], state="readonly")
-type_menu.pack(fill="x", pady=5)
+type_menu.pack(fill="x", pady=3)
 
 # Number of objects
 tk.Label(frame, text="Number of objects to be observed? (1-10):", bg="#ffffff").pack(anchor="w")
 num_var = tk.StringVar()
 num_menu = ttk.Combobox(frame, textvariable=num_var,
                         values=[str(i) for i in range(1, 11)], state="readonly")
-num_menu.pack(fill="x", pady=5)
+num_menu.pack(fill="x", pady=3)
 
 # Names frame (dynamic)
 names_frame = tk.Frame(frame, bg="#ffffff")
-names_frame.pack(pady=10, fill="both")
+names_frame.pack(pady=5, fill="both")
 
 name_entries = []               # list of Entry widgets
 disintegrated_vars = []         # list of BooleanVar for each entry (True = disintegrated)
@@ -96,7 +106,7 @@ def generate_name_entries(*args):
 
     for i in range(count):
         row = tk.Frame(names_frame, bg="#ffffff")
-        row.pack(fill="x", pady=3)
+        row.pack(fill="x", pady=2)
 
         lbl = tk.Label(row, text=f"Enter name of object {i+1}:", bg="#ffffff")
         lbl.pack(side="left")
@@ -126,8 +136,8 @@ visibility_chk.pack(anchor="w", pady=5)
 # ---------------------------------------------------------
 console_label = tk.Label(root, text="Console Output:", bg="#f2f4f7", anchor="w")
 console_label.pack(fill="x", padx=12)
-console = scrolledtext.ScrolledText(root, height=14, width=110, bg="#1e1e1e", fg="#00ff00", font=("Consolas", 10))
-console.pack(padx=12, pady=6)
+console = scrolledtext.ScrolledText(root, height=8, width=110, bg="#1e1e1e", fg="#00ff00", font=("Consolas", 10))
+console.pack(padx=12, pady=4)
 
 def log(msg):
     console.configure(state="normal")
@@ -140,7 +150,7 @@ def log(msg):
 # PROGRESS BAR
 # ---------------------------------------------------------
 progress = ttk.Progressbar(root, orient="horizontal", mode="determinate", length=680)
-progress.pack(pady=12)
+progress.pack(pady=6)
 
 # ---------------------------------------------------------
 # OPEN FINAL FOLDER BUTTON (disabled until completion)
@@ -158,7 +168,7 @@ def open_final_folder():
         subprocess.call(["xdg-open", folder])
 
 open_final_btn = tk.Button(root, text="Open Final Folder", command=open_final_folder, state="disabled")
-open_final_btn.pack(pady=5)
+open_final_btn.pack(pady=3)
 
 # ---------------------------------------------------------
 # VISIBILITY: container to store ephemerides for plotting
@@ -170,28 +180,23 @@ visibility_eph = []   # list of dicts {name, dates (datetime list), elev (list)}
 # PROCESSING FUNCTION (runs in separate thread)
 # ---------------------------------------------------------
 def run_process_thread():
-    t = threading.Thread(target=run_process, daemon=True)
-    t.start()
+    #t = threading.Thread(target=run_process, daemon=True)
+    #t.start()
+    run_process()
     
 def done():
     print("Finished work, closing GUI...")
 
-    # 1. Close all Matplotlib windows safely
-    #try:
-    #    plt.close('all')
-    #except Exception as e:
-    #    print("Error closing matplotlib figures:", e)
-
-    # 2. Cancel all pending Tk callbacks (important!)
+    # Close all Matplotlib figures before destroying Tkinter
     try:
-        root.after_cancel(root._after_id)
-    except Exception:
-        pass  # may not exist; safe to ignore
+        plt.close('all')
+    except Exception as e:
+        print("Error closing matplotlib figures:", e)
 
-    # 3. Quit mainloop first
+    # Quit the Tkinter main loop
     root.quit()
 
-    # 4. Then destroy the window
+    # Destroy the main Tkinter window
     root.destroy()
 
 def run_process():
@@ -207,8 +212,7 @@ def run_process():
         messagebox.showerror("Error", "Date must be in YYYY-MM-DD format.")
         return
 
-    stop_date = start_date + timedelta(days=2)   # keep same 2 day window used in trackfile generation
-    # For visibility plotting we'll use 1-day window later (start_date to start_date+1)
+    stop_date = start_date + timedelta(days=2)  
     month = month_var.get()
     month_no = months_dict[month]
 
@@ -239,6 +243,20 @@ def run_process():
 
     # Prepare Final folder
     os.makedirs("Final", exist_ok=True)
+    date_tag = start_date.strftime("%Y_%m_%d")
+    date_tag_compact = start_date.strftime("%Y%m%d")
+    generated_trackfiles = []
+
+    def write_jpl_error(object_name, error):
+        object_name_clean = re.sub(r'[ /]', '', object_name)
+        error_file = os.path.join(
+            "Final", f"{object_name_clean}_{date_tag_compact}_jplerror.log"
+        )
+        with open(error_file, "a", encoding="utf-8") as error_handle:
+            error_handle.write(
+                f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+                f"{object_name}: {error}\n"
+            )
 
     progress["value"] = 0
     progress["maximum"] = n
@@ -271,13 +289,14 @@ def run_process():
                                   skip_daylight=False, airmass_lessthan=3.0)
         except Exception as e:
             log(f"ERROR retrieving ephemeris for trackfile {comet_name}: {e}")
+            write_jpl_error(comet_name, e)
             progress["value"] = i + 1
             root.update_idletasks()
             continue
 
         comet_name_clean = re.sub(r'[ /]', '', comet_name)
 
-        # find start and end lines (as in your original script)
+        # find start and end lines 
         try:
             for j in range(len(eph['datetime_str']) - 1):
                 if int(eph['datetime_str'][j+1][12:14]) - int(eph['datetime_str'][j][12:14]) > 1:
@@ -298,7 +317,7 @@ def run_process():
             root.update_idletasks()
             continue
 
-        # Write initial TXT as original
+        # Write initial TXT 
         txt = comet_name_clean + ".txt"
         try:
             with open(txt, "w") as f:
@@ -317,7 +336,6 @@ def run_process():
             root.update_idletasks()
             continue
 
-        # Create _1.txt without quotes
         txt1 = comet_name_clean + "_1.txt"
         try:
             with open(txt, "r") as f, open(txt1, "w") as fo:
@@ -329,7 +347,7 @@ def run_process():
             root.update_idletasks()
             continue
 
-        # Read and rewrite columns exactly as original
+        # Read and rewrite columns
         try:
             data = pd.read_csv(txt1, sep=' ')
             data.columns = ['Date', 'Time', 'Azi', 'Elev', 'Azi_cosE', 'Elev_rate']
@@ -340,10 +358,9 @@ def run_process():
             root.update_idletasks()
             continue
 
-        # Pause as original
         time.sleep(0.5)
 
-        # Trackfile computations (exact operations preserved)
+        # Trackfile computations
         try:
             data = pd.read_csv(txt1, sep=' ')
             zeroes = np.zeros(len(data.Date), dtype=np.int64)
@@ -374,9 +391,8 @@ def run_process():
             root.update_idletasks()
             continue
 
-        # AWK command (as in original)
         try:
-            awk_out = comet_name_clean + "_awked_neg_az.trk"
+            awk_out = f"{comet_name_clean}_{date_tag}.trk"
             cmd = (
                 "awk ' {if (NR<3) print $0; else { "
                 "{ if ($2 > 325) {az=$2-360} else {az=$2}} ;  "
@@ -384,9 +400,10 @@ def run_process():
                 + trk + " > " + awk_out
             )
             os.system(cmd)
+            if os.path.exists(awk_out):
+                generated_trackfiles.append(awk_out)
         except Exception as e:
             log(f"ERROR executing awk for {comet_name}: {e}")
-            # continue to next steps
         progress["value"] = i + 1
         root.update_idletasks()
         log(f"Finished: {comet_name}")
@@ -403,19 +420,16 @@ def run_process():
             dis_flag = disintegrated_vars[i].get()
             try:
                 vis_stop = start_date + timedelta(days=1)
-                if not dis_flag:
-                    obj_vis = Horizons(id=comet_name, location=HCT,
-                                    epochs={'start': str(start_date), 'stop': str(vis_stop), 'step': '10m'},
-                                    id_type=idtype_default)
+                if not dis_flag and i!=n:
+                    obj_vis = Horizons(id=comet_name, location=HCT,epochs={'start': str(start_date), 'stop': str(vis_stop), 'step': '10m'},id_type=idtype_default)        
                 else:
-                    obj_vis = Horizons(id=comet_name, location=HCT,
-                                    epochs={'start': str(start_date), 'stop': str(vis_stop), 'step': '10m'})
+                    obj_vis = Horizons(id=comet_name, location=HCT,epochs={'start': str(start_date), 'stop': str(vis_stop), 'step': '10m'})
                 eph_vis = obj_vis.ephemerides(quantities='4,5', closest_apparition=True, skip_daylight=False)
                 # Convert times and elevations into datetime and float arrays for plotting
                 UT_list = list(eph_vis['datetime_str'])
                 AZ_list = list(eph_vis['AZ'])
                 EL_list = list(eph_vis['EL'])
-                # detect first continuous block like in the original visibility script (line_num)
+                # detect first continuous block
                 line_num = 0
                 for j in range(0, len(UT_list)-1):
                     try:
@@ -426,7 +440,6 @@ def run_process():
                 # Use the remainder from line_num to end
                 times_block = UT_list[line_num:]
                 times_block[-1] = times_block[-1][:-5] + "23:59" if times_block[-1].endswith("00:00") else times_block[-1]
-                #print(times_block)
                 elev_block = EL_list[line_num:]
                 # convert HH:MM strings into datetime objects (date = start_date)
                 # UT strings are 'YYYY-MMM-DD HH:MM' or similar; to be robust parse using datetime
@@ -447,6 +460,7 @@ def run_process():
                 visibility_eph.append({'name': comet_name, 'dt': dt_list, 'elev': elev_block})
             except Exception as e:
                     log(f"ERROR retrieving ephemeris for visibility {comet_name}: {e}")
+                    write_jpl_error(comet_name, e)
             # do not abort; continue
 
             # Update progress
@@ -454,14 +468,13 @@ def run_process():
             root.update_idletasks()
             log(f"Finished: {comet_name}")
 
-    # Finalize: move to Final folder and cleanup (preserving original behavior)
+    # Finalize: move generated trackfiles to Final.
     try:
         os.makedirs("Final", exist_ok=True)
-        os.system("mv *_neg_az.trk Final/")   # original behaviour preserved
+        for trackfile in generated_trackfiles:
+            shutil.move(trackfile, os.path.join("Final", os.path.basename(trackfile)))
     except Exception as e:
         log(f"ERROR moving files to Final/: {e}")
-    except Exception:
-        pass    
     
     
     for i in range(0,len(names)-1):
@@ -499,65 +512,67 @@ def show_visibility_plot(visibility_list, start_date):
         dt_list = entry['dt']
         elev_list = [float(x) for x in entry['elev']] if len(entry['elev']) == len(dt_list) else [float(x) for x in entry['elev'][:len(dt_list)]]
         
-        #colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-        # Remove colors close to red
-        #filtered = [c for c in colors if c not in ['r', 'red']]
         
         if name == '301':
             ax.plot(matplotlib.dates.date2num(dt_list), elev_list, 'r--', label='Moon')
         else:
             ax.plot(matplotlib.dates.date2num(dt_list), elev_list, '-', label=name)
 
-    # night vertical line at 13:30 UT (as in supplied script)
+    # night vertical line at 13:30 UT
     night_time = '13:30'
     night_obj = datetime.strptime(night_time, '%H:%M').time()
     plot_night = datetime.combine(start_date, night_obj)
     night = matplotlib.dates.date2num(plot_night)
 
-    # x limits: start_date 05:00 to start_date+1 00:00 (as in script)
-    start_obj = datetime.strptime('05:00', '%H:%M').time()
+    # x limits: start_date 05:00 to start_date+1 00:00
+    start_obj = datetime.strptime('08:00', '%H:%M').time()
     end_obj = datetime.strptime('00:00', '%H:%M').time()
     plot_start = datetime.combine(start_date, start_obj)
     plot_end = datetime.combine(start_date + timedelta(days=1), end_obj)
 
     start_num = matplotlib.dates.date2num(plot_start)
     end_num = matplotlib.dates.date2num(plot_end)
-
-    ax.axhline(25, xmin=0, xmax=1, ls='--', color='k')
-    ax.axvline(night, ymin=0, ymax=1, ls='--', color='k')
-    ax.text(night, 75, 'Night', rotation=90, fontsize=16)
-    #ax.text(25, , 'Elevation limit', rotation=0, fontsize=16)
-
+    
+    ax.axhline(20,xmin=0,xmax=1,ls='--',color='k')
+    ax.axvline(night,ymin=0,ymax=1,ls='--',color='k')
+    ax.text(night,75,'Night',rotation=90,fontsize=20)
+    ax.xaxis.set_minor_locator(AutoMinorLocator())
+    ax.yaxis.set_minor_locator(AutoMinorLocator())
+    ax.tick_params(which='both', width=1)
+    ax.tick_params(axis='both',which='major', length=10,color='k')
+    ax.tick_params(axis='both',which='minor', length=6, color='k')
     xlabel = start_date.strftime('%Y-%m-%d') + ' UT'
-    ax.set_xlabel(xlabel, fontsize=24)
-    ax.set_ylabel('Elevation (deg)', fontsize=24)
-    ax.tick_params(axis='x', which='both', direction='in', bottom=True, top=True, labelsize=22)
-    ax.tick_params(axis='y', which='both', direction='in', left=True, right=True, labelsize=22)
-
+    ax.set_xlabel(xlabel,fontsize=22)
+    ax.set_ylabel('Elevation (deg)',fontsize=22)
+    ax.tick_params(axis='x',which='both',direction='in', bottom=True, top=True,labelsize=20)
+    ax.tick_params(axis='y',which='both',direction='in', left=True, right=True,labelsize=20)
     ax.grid(False)
-    for spine in ax.spines.values():
-        spine.set_color('black')
+    ax.spines['bottom'].set_color('black')
+    ax.spines['top'].set_color('black')
+    ax.spines['left'].set_color('black')
+    ax.spines['right'].set_color('black')
     ax.xaxis.label.set_color('black')
     ax.yaxis.label.set_color('black')
     ax.tick_params(axis='both', colors='black')
-
+    ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=120))
     myFmt = mdates.DateFormatter('%H:%M')
     ax.xaxis.set_major_formatter(myFmt)
     ax.set_xlim(start_num, end_num)
-    ax.set_ylim(10, 90)
-    ax.legend(fontsize=22, loc='upper right')
+    ax.set_ylim(7,90)
+    ax.legend(fontsize=20,loc='upper right',frameon=True)
+    
     ax.set_title('Visibility curve', fontsize=24)
-    fig.set_size_inches(14, 8)
+    fig.set_size_inches(12, 8)
 
     # show plot in external window
     plt.show(block='True')
 
     # ask user whether to save
-    save = messagebox.askyesno("Save plot", "Do you want to save the visibility plot as 'Visibility.png' in the current folder?")
+    save = messagebox.askyesno("Save plot", "Do you want to save the visibility plot as 'Visibility_date.png' in the Final folder?")
     if save:
         try:
-            fig.savefig(os.path.join(os.getcwd(), 'Visibility.png'), bbox_inches='tight', dpi=100)
-            log("Visibility plot saved as Visibility.png")
+            fig.savefig(os.getcwd()+'/Final/Visibility_'+xlabel[:-3]+'.png', bbox_inches='tight', dpi=100)
+            log("Visibility plot saved as Visibility_"+xlabel[:-3]+".png")
         except Exception as e:
             log(f"ERROR saving visibility plot: {e}")
     #else:
@@ -571,18 +586,18 @@ def show_visibility_plot(visibility_list, start_date):
 run_button = tk.Button(root, text="Run Trackfile Generator",
                        command=run_process_thread, bg="#008753", fg="white",
                        font=("Arial", 11, "bold"), padx=10, pady=6)
-run_button.pack(pady=8)
+run_button.pack(pady=5)
 
 # ---------------------------------------------------------
 # RED WARNING MESSAGE
 # ---------------------------------------------------------
 warning = tk.Label(root,
     text="If you encounter the error 'ValueError: Ambiguous target name; provide unique id:',\n"
-         "choose the appropriate unique id shown in the terminal and re-run.",
+         "choose the appropriate unique id (Record #) shown in the terminal and re-run.",
     fg="red", bg="#f2f4f7",
-    font=("Arial", 10, "bold")
+    font=("Arial", 8, "bold")
 )
-warning.pack(pady=8)
+warning.pack(pady=4)
 
 root._after_id = root.after(1, lambda: None)
 
