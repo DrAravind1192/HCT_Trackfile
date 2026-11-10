@@ -126,6 +126,7 @@ The GUI requires the following inputs.
 
 Choose the observing month from the drop-down list.
 
+_Make sure to change the selected month when changing the month in observing date (to produce trackfile for multiple dates)_
 ---
 
 ## 2. Observation Date
@@ -205,7 +206,7 @@ Tick
 Generate Visibility Plot
 ```
 
-to produce an elevation plot.
+to produce an elevation plot along with moon.
 
 If unchecked, only the trackfiles are generated.
 
@@ -222,7 +223,7 @@ Final/
 containing
 
 ```
-*_neg_az.trk
+*_observing_date.trk
 ```
 
 These are the files required by the HCT telescope.
@@ -230,10 +231,10 @@ These are the files required by the HCT telescope.
 If requested, the program also produces
 
 ```
-Visibility.png
+Visibility_observing_date.png
 ```
 
-showing the elevation curves of all selected objects throughout the observing night.
+showing the elevation curves of all selected objects and moon throughout the observing night.
 
 ---
 
@@ -261,9 +262,9 @@ If Horizons cannot uniquely identify an object, an error similar to
 ValueError: Ambiguous target name; provide unique id
 ```
 
-may appear.
+may appear. The specific error can be seen in a JPL errorlog file with the Final folder.
 
-Simply use the unique identifier suggested by Horizons and run the program again.
+Simply use the unique identifier (Record #) suggested by Horizons and run the program again.
 
 ---
 
